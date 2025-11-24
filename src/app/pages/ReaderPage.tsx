@@ -142,16 +142,76 @@ const ReaderPage: React.FC<ReaderPageProps> = ({ src }) => {
             return { id, title: h.innerText, element: h };
           });
 
-        // Get only the main content
-        const mainContent = contentDiv.querySelector('.mw-parser-output') || contentDiv;
+        // Get main content with multiple fallback selectors
+        let mainContent: Element | null = null;
+        
+        // Try #mw-content-text .mw-parser-output first (most common)
+        const contentText = doc.querySelector('#mw-content-text');
+        if (contentText) {
+          mainContent = contentText.querySelector('.mw-parser-output');
+        }
+        
+        // Fallback to #bodyContent .mw-parser-output
+        if (!mainContent) {
+          const bodyContent = doc.querySelector('#bodyContent');
+          if (bodyContent) {
+            mainContent = bodyContent.querySelector('.mw-parser-output');
+          }
+        }
+        
+        // Fallback to #mw-content-text directly
+        if (!mainContent && contentText) {
+          mainContent = contentText;
+        }
+        
+        // Fallback to #content
+        if (!mainContent) {
+          mainContent = doc.querySelector('#content');
+        }
+        
+        // Fallback to .mw-body-content
+        if (!mainContent) {
+          mainContent = doc.querySelector('.mw-body-content');
+        }
+        
+        // Last resort: body
+        if (!mainContent) {
+          mainContent = doc.body;
+        }
+        
+        // Validate we have content
+        if (!mainContent || !mainContent.innerHTML || mainContent.innerHTML.trim().length === 0) {
+          throw new Error('No content found on page - all selectors failed');
+        }
         
         // Sanitize
         const sanitizedHTML = DOMPurify.sanitize(mainContent.innerHTML);
+        
+        // Final validation
+        if (!sanitizedHTML || sanitizedHTML.trim().length === 0) {
+          throw new Error('Sanitized HTML is empty');
+        }
 
         setHtml(sanitizedHTML);
         setSections(parsedSections);
       } catch (err) {
         console.error("Failed to fetch article:", err);
+        
+        // Set user-friendly error message
+        setHtml(`
+          <div style="padding: 3rem 2rem; text-align: center; color: var(--color-text-secondary);">
+            <h2 style="color: var(--color-text-primary); margin-bottom: 1rem;">Failed to Load Article</h2>
+            <p style="margin-bottom: 1.5rem;">Could not fetch or parse the Wikipedia page.</p>
+            <p style="margin-bottom: 0.5rem;"><strong>Error:</strong> ${err instanceof Error ? err.message : 'Unknown error'}</p>
+            <p style="margin-top: 2rem;">
+              <a href="${src}" target="_blank" style="color: var(--color-link); text-decoration: underline;">
+                Open original Wikipedia page →
+              </a>
+            </p>
+          </div>
+        `);
+        setSections([]);
+        setReadingTime(0);
       }
     };
 
